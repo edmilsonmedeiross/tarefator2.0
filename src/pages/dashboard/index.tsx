@@ -1,5 +1,6 @@
 import { GetServerSideProps } from 'next';
 import { getSession } from 'next-auth/react';
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { FaTrash } from 'react-icons/fa';
@@ -14,16 +15,16 @@ import {
   where,
   orderBy,
   onSnapshot,
+  doc,
+  deleteDoc,
 } from 'firebase/firestore';
 interface FormData {
   task: string;
   isPublic: boolean;
 }
-
 interface User {
   email: string;
 }
-
 interface Task {
   id: string;
   task: string;
@@ -75,9 +76,20 @@ function Dashboard({ user }: { user: User }) {
 
       reset({ task: '', isPublic: false });
     } catch (error) {
-      console.log('cai no erro', error);
+      console.log(error);
     }
-    console.log(data);
+  };
+
+  const handleShare = (id: string) => {
+    navigator.clipboard.writeText(`${process.env.NEXT_PUBLIC_URL}/task/${id}`);
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'tasks', id));
+    } catch (error) {
+      console.log(error);
+    }
   };
 
   return (
@@ -124,14 +136,20 @@ function Dashboard({ user }: { user: User }) {
                   <label className="bg-[#3183ff] py-1 px-1 text-white font-medium rounded-md text-xs">
                     Publico
                   </label>
-                  <button>
+                  <button onClick={() => handleShare(task.id)}>
                     <FiShare2 size={22} color="#3183ff" className="mx-2" />
                   </button>
                 </div>
               )}
               <div className="flex items-center justify-between w-full">
-                <p className="whitespace-pre-wrap">{task.task}</p>
-                <button>
+                {task.isPublic ? (
+                  <Link href={`/task/${task.id}`}>
+                    <p className="whitespace-pre-wrap">{task.task}</p>
+                  </Link>
+                ) : (
+                  <p className="whitespace-pre-wrap">{task.task}</p>
+                )}
+                <button onClick={() => handleDelete(task.id)}>
                   <FaTrash size={22} color="#ea3140" className="mx-2" />
                 </button>
               </div>
