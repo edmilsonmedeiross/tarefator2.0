@@ -1,17 +1,82 @@
 import { GetServerSideProps } from 'next';
 import { getSession } from 'next-auth/react';
+import { useEffect, useState } from 'react';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { FaTrash } from 'react-icons/fa';
 import { FiShare2 } from 'react-icons/fi';
+
+import { db } from '../../services/firebaseConnection';
+
+import {
+  addDoc,
+  collection,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+} from 'firebase/firestore';
 interface FormData {
   task: string;
   isPublic: boolean;
 }
 
-function Dashboard() {
-  const { register, handleSubmit } = useForm<FormData>();
+interface User {
+  email: string;
+}
 
-  const onSubmit: SubmitHandler<FormData> = (data) => {
+interface Task {
+  id: string;
+  task: string;
+  isPublic: boolean;
+  createdAt: Date;
+  user: string;
+}
+
+function Dashboard({ user }: { user: User }) {
+  const { register, handleSubmit, reset } = useForm<FormData>();
+  const [tasks, setTasks] = useState<Task[]>([]);
+
+  useEffect(() => {
+    const loadTasks = async () => {
+      const tasksRef = collection(db, 'tasks');
+      const q = query(
+        tasksRef,
+        where('user', '==', user?.email),
+        orderBy('createdAt', 'desc')
+      );
+
+      onSnapshot(q, (querySnapshot) => {
+        const tasks = [] as Task[];
+        querySnapshot.forEach((doc) => {
+          tasks.push({
+            id: doc.id,
+            task: doc.data().task,
+            isPublic: doc.data().isPublic,
+            createdAt: doc.data().createdAt,
+            user: doc.data().user,
+          });
+        });
+
+        setTasks(tasks);
+      });
+    };
+    loadTasks();
+  }, [user.email]);
+
+  const onSubmit: SubmitHandler<FormData> = async (data) => {
+    if (!data.task) return alert('Digite uma tarefa');
+    try {
+      await addDoc(collection(db, 'tasks'), {
+        task: data.task,
+        isPublic: data.isPublic,
+        createdAt: new Date(),
+        user: user?.email,
+      });
+
+      reset({ task: '', isPublic: false });
+    } catch (error) {
+      console.log('cai no erro', error);
+    }
     console.log(data);
   };
 
@@ -49,22 +114,29 @@ function Dashboard() {
         </section>
         <section className="mt-8 mr-auto mb-0 ml-auto px-4 w-full max-w-5xl flex flex-col">
           <h1 className="text-center text-3xl p-3">Minhas Tarefas</h1>
-          <article className="mb-3 leading-relaxed border-2 border-gray-400 rounded-md p-4 flex flex-col items-start">
-            <div className="flex items-center justify-center mb-3">
-              <label className="bg-[#3183ff] py-1 px-1 text-white font-medium rounded-md text-xs">
-                Publico
-              </label>
-              <button>
-                <FiShare2 size={22} color="#3183ff" className="mx-2" />
-              </button>
-            </div>
-            <div className="flex items-center justify-between w-full">
-              <p className="whitespace-pre-wrap">Minha tarefa</p>
-              <button>
-                <FaTrash size={22} color="#ea3140" className="mx-2" />
-              </button>
-            </div>
-          </article>
+          {tasks.map((task) => (
+            <article
+              key={task.id}
+              className="mb-3 leading-relaxed border-2 border-gray-400 rounded-md p-4 flex flex-col items-start"
+            >
+              {task.isPublic && (
+                <div className="flex items-center justify-center mb-3">
+                  <label className="bg-[#3183ff] py-1 px-1 text-white font-medium rounded-md text-xs">
+                    Publico
+                  </label>
+                  <button>
+                    <FiShare2 size={22} color="#3183ff" className="mx-2" />
+                  </button>
+                </div>
+              )}
+              <div className="flex items-center justify-between w-full">
+                <p className="whitespace-pre-wrap">{task.task}</p>
+                <button>
+                  <FaTrash size={22} color="#ea3140" className="mx-2" />
+                </button>
+              </div>
+            </article>
+          ))}
         </section>
       </main>
     </div>
@@ -75,7 +147,7 @@ export default Dashboard;
 
 export const getServerSideProps: GetServerSideProps = async ({ req }) => {
   const session = await getSession({ req });
-  console.log(session);
+  console.log(session?.user?.email);
 
   if (!session) {
     return {
@@ -88,7 +160,9 @@ export const getServerSideProps: GetServerSideProps = async ({ req }) => {
 
   return {
     props: {
-      props: {},
+      user: {
+        email: session?.user?.email,
+      },
     },
   };
 };
